@@ -51,11 +51,11 @@ Content-Type: application/json
   "shouldRemoveBackground": true,
   "confidence": 0.89,
   "scores": {
-    "odstranit": 0.89,
-    "ponechat": 0.11,
-    "weightedOdstranit": 1.335
+    "remove": 0.89,
+    "keep": 0.11,
+    "weightedRemove": 1.335
   },
-  "decision": "Odstranit pozadí"
+  "decision": "Remove background"
 }
 ```
 
