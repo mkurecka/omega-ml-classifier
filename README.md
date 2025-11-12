@@ -10,6 +10,7 @@ This service uses a Teachable Machine image classification model to automaticall
 
 - ✅ TensorFlow.js-based image classification
 - ✅ REST API with health checks
+- ✅ Bearer token authentication
 - ✅ Supports both URL and base64 image inputs
 - ✅ Docker containerized
 - ✅ Automatic model loading on startup
@@ -29,7 +30,13 @@ Health check endpoint.
 ```
 
 ### `POST /predict`
-Predict from image URL.
+Predict from image URL. **Requires authentication.**
+
+**Headers:**
+```
+Authorization: Bearer YOUR_API_TOKEN
+Content-Type: application/json
+```
 
 **Request:**
 ```json
@@ -72,12 +79,23 @@ Predict from base64 image data.
 
 ### Setup
 ```bash
-cd services/ml-background-classifier
 npm install
+```
+
+### Configuration
+Create a `.env` file or set environment variables:
+```bash
+API_TOKEN=your-secret-token-here
+PORT=3000
+MODEL_PATH=./model
 ```
 
 ### Run
 ```bash
+# Set API token
+export API_TOKEN="your-secret-token-here"
+
+# Start service
 npm start
 ```
 
@@ -88,9 +106,12 @@ npm run dev
 
 ### Test
 ```bash
+# Health check (no auth required)
 curl http://localhost:3000/health
 
+# Prediction with authentication
 curl -X POST http://localhost:3000/predict \
+  -H "Authorization: Bearer your-secret-token-here" \
   -H "Content-Type: application/json" \
   -d '{"imageUrl": "https://example.com/product.jpg"}'
 ```
@@ -104,7 +125,9 @@ docker build -t ml-background-classifier .
 
 ### Run
 ```bash
-docker run -p 3000:3000 ml-background-classifier
+docker run -p 3000:3000 \
+  -e API_TOKEN="your-secret-token-here" \
+  ml-background-classifier
 ```
 
 ### Docker Compose
@@ -124,16 +147,20 @@ docker-compose up ml-classifier
 
 ## Environment Variables
 
+- `API_TOKEN` - **Required**. Bearer token for API authentication
 - `PORT` - Service port (default: 3000)
 - `MODEL_PATH` - Path to model files (default: ./model)
 
 ## Integration with Omega
 
-The service is called from PHP via HTTP:
+The service is called from PHP via HTTP with authentication:
 
 ```php
 // app/Model/ML/BackgroundClassifierService.php
 $response = $this->httpClient->post('http://ml-classifier:3000/predict', [
+    'headers' => [
+        'Authorization' => 'Bearer ' . $apiToken
+    ],
     'json' => ['imageUrl' => $imageUrl]
 ]);
 ```
@@ -146,6 +173,14 @@ $response = $this->httpClient->post('http://ml-classifier:3000/predict', [
 - **Throughput**: 10-100 requests/sec
 
 ## Troubleshooting
+
+### API_TOKEN not set
+- Ensure `API_TOKEN` environment variable is set before starting
+- Service will exit with error if not configured
+
+### Authentication errors (401/403)
+- Verify correct Bearer token in Authorization header
+- Token must match the `API_TOKEN` environment variable
 
 ### Model not loading
 - Ensure `model/model.json`, `model/metadata.json`, and `model/weights.bin` exist
