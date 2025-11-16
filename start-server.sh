@@ -51,8 +51,11 @@ restart_count=0
 while true; do
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting server (attempt $((restart_count + 1)))..." | tee -a "$LOG_FILE"
 
-  # Start the server
-  node server.js >> "$LOG_FILE" 2>&1 &
+  # Log system resources before starting
+  echo "[SYSTEM] Memory: $(free -h | grep Mem: | awk '{print $3 "/" $2}')" | tee -a "$LOG_FILE"
+
+  # Start the server with --expose-gc for manual garbage collection
+  node --expose-gc server.js >> "$LOG_FILE" 2>&1 &
   SERVER_PID=$!
 
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] Server started with PID: $SERVER_PID" | tee -a "$LOG_FILE"
@@ -61,7 +64,29 @@ while true; do
   wait $SERVER_PID
   EXIT_CODE=$?
 
+  # Log detailed exit information
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] Server stopped with exit code: $EXIT_CODE" | tee -a "$LOG_FILE"
+
+  case $EXIT_CODE in
+    0)
+      echo "[EXIT] Graceful shutdown" | tee -a "$LOG_FILE"
+      ;;
+    1)
+      echo "[EXIT] Error - check logs for details" | tee -a "$LOG_FILE"
+      ;;
+    137)
+      echo "[EXIT] Killed by SIGKILL (possible OOM)" | tee -a "$LOG_FILE"
+      ;;
+    143)
+      echo "[EXIT] Terminated by SIGTERM" | tee -a "$LOG_FILE"
+      ;;
+    *)
+      echo "[EXIT] Unknown exit code: $EXIT_CODE" | tee -a "$LOG_FILE"
+      ;;
+  esac
+
+  # Log system resources after crash
+  echo "[SYSTEM] Memory after crash: $(free -h | grep Mem: | awk '{print $3 "/" $2}')" | tee -a "$LOG_FILE"
 
   # Increment restart counter
   restart_count=$((restart_count + 1))

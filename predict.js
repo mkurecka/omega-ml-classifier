@@ -41,19 +41,20 @@ async function predictImage(imageBuffer) {
     .resize(224, 224, { fit: 'fill' })
     .toBuffer();
 
-  // Convert to tensor and normalize to [0, 1]
-  let tensor = tf.node.decodeImage(resizedBuffer, 3);
-  tensor = tf.expandDims(tensor, 0);
-  tensor = tf.cast(tensor, 'float32');
-  tensor = tf.div(tensor, 255.0);
+  // Use tidy to automatically cleanup all intermediate tensors
+  const probabilities = await tf.tidy(() => {
+    // Convert to tensor and normalize to [0, 1]
+    const decodedImage = tf.node.decodeImage(resizedBuffer, 3);
+    const expanded = tf.expandDims(decodedImage, 0);
+    const floatTensor = tf.cast(expanded, 'float32');
+    const normalized = tf.div(floatTensor, 255.0);
 
-  // Run prediction
-  const prediction = model.predict(tensor);
-  const probabilities = await prediction.data();
+    // Run prediction - tidy will dispose all intermediate tensors
+    const prediction = model.predict(normalized);
 
-  // Clean up tensors
-  tensor.dispose();
-  prediction.dispose();
+    // Extract data (returns promise but tensor stays in memory)
+    return prediction.data();
+  });
 
   // Map probabilities to class labels
   const classResults = metadata.labels.map((label, index) => ({
@@ -86,7 +87,28 @@ async function predictImage(imageBuffer) {
   };
 }
 
+/**
+ * Force cleanup of TensorFlow memory
+ */
+function cleanupMemory() {
+  const memBefore = tf.memory();
+  console.log(`[CLEANUP] Tensors: ${memBefore.numTensors} | Bytes: ${(memBefore.numBytes / 1024 / 1024).toFixed(2)}MB`);
+
+  // Dispose all tensors except the model
+  // Note: This is aggressive but necessary to prevent leaks
+  tf.engine().endScope();
+  tf.engine().startScope();
+
+  const memAfter = tf.memory();
+  console.log(`[CLEANUP] After: ${memAfter.numTensors} | Bytes: ${(memAfter.numBytes / 1024 / 1024).toFixed(2)}MB | Freed: ${memBefore.numTensors - memAfter.numTensors} tensors`);
+
+  if (global.gc) {
+    global.gc();
+  }
+}
+
 module.exports = {
   loadModel,
-  predictImage
+  predictImage,
+  cleanupMemory
 };
