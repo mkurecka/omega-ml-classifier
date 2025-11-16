@@ -94,16 +94,12 @@ function cleanupMemory() {
   const memBefore = tf.memory();
   console.log(`[CLEANUP] Tensors: ${memBefore.numTensors} | Bytes: ${(memBefore.numBytes / 1024 / 1024).toFixed(2)}MB`);
 
-  // Dispose all tensors except the model
-  // Note: This is aggressive but necessary to prevent leaks
-  tf.engine().endScope();
-  tf.engine().startScope();
-
-  const memAfter = tf.memory();
-  console.log(`[CLEANUP] After: ${memAfter.numTensors} | Bytes: ${(memAfter.numBytes / 1024 / 1024).toFixed(2)}MB | Freed: ${memBefore.numTensors - memAfter.numTensors} tensors`);
-
+  // Note: tf.tidy() in predictImage() handles most cleanup automatically
+  // Just trigger JS garbage collection here
   if (global.gc) {
     global.gc();
+    const memAfter = tf.memory();
+    console.log(`[CLEANUP] After GC: ${memAfter.numTensors} tensors | ${(memAfter.numBytes / 1024 / 1024).toFixed(2)}MB`);
   }
 }
 
