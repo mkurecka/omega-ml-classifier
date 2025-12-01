@@ -1,0 +1,41 @@
+stages:
+  - deploy
+
+variables:
+  # Change these variables or overwrite them in GitLab CI/CD Settings
+  DEPLOY_DIR: "/var/www/ml-background-classifier"
+
+deploy_production:
+  stage: deploy
+  image: node:18
+  only:
+    - main
+    - master
+  before_script:
+    # Setup SSH agent and rsync
+    - 'command -v ssh-agent >/dev/null || ( apt-get update -y && apt-get install openssh-client -y )'
+    - 'command -v rsync >/dev/null || ( apt-get update -y && apt-get install rsync -y )'
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    # Add server to known hosts to avoid interactive prompt
+    - ssh-keyscan $SERVER_IP >> ~/.ssh/known_hosts
+    - chmod 644 ~/.ssh/known_hosts
+  script:
+    - echo "Deploying to $SERVER_IP..."
+
+    # Sync files to server
+    - rsync -avz --exclude 'node_modules' --exclude '.git' --exclude 'model' ./ $SERVER_USER@$SERVER_IP:$DEPLOY_DIR
+
+    # Install dependencies and restart PM2 on server
+    - |
+      ssh $SERVER_USER@$SERVER_IP "cd $DEPLOY_DIR && \
+      npm ci --production && \
+      npm rebuild @tensorflow/tfjs-node --build-from-source && \
+      API_TOKEN=$API_TOKEN pm2 startOrReload ecosystem.config.js --update-env && \
+      pm2 save"
+
+  environment:
+    name: production
+    url: http://$SERVER_IP:3005
